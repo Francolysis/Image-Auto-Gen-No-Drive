@@ -101,7 +101,7 @@ if uploaded_file:
 
                         full_prompt = f"{prompt}, {style}" if style.lower() not in prompt.lower() else prompt
 
-                        response = openai.images.generate(
+                        response = client.images.generate(
                             model="dall-e-3",
                             prompt=full_prompt,
                             size=size,
