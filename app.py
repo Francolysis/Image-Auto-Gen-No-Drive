@@ -1,4 +1,3 @@
-# AI Image Generator App (Updated for OpenAI SDK v1+)
 import streamlit as st
 import pandas as pd
 from openai import OpenAI
@@ -12,14 +11,29 @@ from email.message import EmailMessage
 import smtplib
 import openpyxl
 
-st.set_page_config(page_title="AI Image Generator", layout="centered")
-st.title("🖼️ AI Image Generator (No Drive)")
-st.markdown("Upload an Excel file with prompts, styles, and sizes to generate images using OpenAI DALL·E 3.")
+# Set page config
+st.set_page_config(page_title="Image Generator (No Google Drive)", layout="wide")
+st.title("🖼️ DALL·E 3 Image Generator")
 
+# Load API Key
 openai_key = st.secrets["OPENAI_API_KEY"]
 client = OpenAI(api_key=openai_key)
 
-uploaded_file = st.file_uploader("📁 Upload Excel File (.xlsx)", type=["xlsx"])
+# Upload Excel File
+uploaded_file = st.file_uploader("📤 Upload Excel file with prompts", type=[".xlsx"])
+
+# Define available styles and sizes
+available_styles = ["cinematic", "realistic", "cartoon", "oil painting", "photograph", "digital art", "anime", "disney", "metro", "ghibli", "illustration"]
+available_sizes = {
+    "Square (1:1)": "1024x1024",
+    "Portrait (9:16)": "1024x1792",
+    "Landscape (16:9)": "1792x1024"
+}
+
+# User selection defaults
+default_style = st.selectbox("🎨 Choose default style for all prompts:", available_styles)
+default_size = st.selectbox("📐 Choose default image size:", list(available_sizes.keys()))
+
 project_name = st.text_input("📝 Enter a name for your image zip file", value="generated_images")
 email_recipient = st.text_input("📧 Enter email(s) to receive ZIP (comma-separated)")
 email_subject = st.text_input("✉️ Email Subject", value="Your Generated Images ZIP")
@@ -57,91 +71,63 @@ def send_zip_email(recipients, zip_bytes, log_path, zip_filename, subject, messa
         st.error(f"❌ Failed to send email: {e}")
         return False
 
-if uploaded_file and openai_key:
+# Begin process if file is uploaded
+if uploaded_file:
     try:
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.str.strip().str.capitalize()
-        df = df.dropna(subset=["Prompt"])
-        st.success(f"Loaded {len(df)} prompts.")
-        st.dataframe(df)
 
-        if st.button("🚀 Generate Images"):
-            local_folder = "generated_images"
-            os.makedirs(local_folder, exist_ok=True)
-            image_paths = []
-            log_data = []
-            progress = st.progress(0)
+        if "Prompt" not in df.columns:
+            st.error("❌ Excel file must contain a 'Prompt' column.")
+        else:
+            df["Style"] = df.get("Style", default_style).fillna(default_style)
+            df["Size"] = df.get("Size", available_sizes[default_size]).fillna(available_sizes[default_size])
 
-            for i, row in df.iterrows():
-                try:
-                    prompt = str(row["Prompt"]).strip()
-                    style = str(row.get("Style", "Uncategorized")).strip()
-                    size_option = str(row.get("Size", "1024x1024")).strip()
+            st.success(f"Loaded {len(df)} prompts.")
+            st.dataframe(df)
 
-                    size_lookup = {
-                        "square": "1024x1024",
-                        "portrait": "1024x1792",
-                        "landscape": "1792x1024",
-                        "9:16": "1024x1792",
-                        "16:9": "1792x1024",
-                        "1:1": "1024x1024"
-                    }
-                    size = size_lookup.get(size_option.lower(), size_option)
+            if st.button("🚀 Generate Images"):
+                os.makedirs("generated_images", exist_ok=True)
+                image_paths = []
+                progress = st.progress(0)
+                total = len(df)
 
-                    full_prompt = f"{prompt}, {style}" if style.lower() not in prompt.lower() else prompt
+                for i, row in df.iterrows():
+                    try:
+                        prompt = str(row["Prompt"]).strip()
+                        style = str(row.get("Style", default_style)).strip()
+                        size_label = str(row.get("Size", available_sizes[default_size])).strip()
+                        size = available_sizes.get(size_label, size_label)
 
-                    response = client.images.generate(
-                        model="dall-e-3",
-                        prompt=full_prompt,
-                        size=size,
-                        quality="standard",
-                        n=1
-                    )
-                    image_url = response.data[0].url
-                    image_data = requests.get(image_url).content
+                        full_prompt = f"{prompt}, {style}" if style.lower() not in prompt.lower() else prompt
 
-                    filename = f"image_{i+1}.png"
-                    local_path = os.path.join(local_folder, filename)
-                    with open(local_path, "wb") as f:
-                        f.write(image_data)
+                        response = openai.images.generate(
+                            model="dall-e-3",
+                            prompt=full_prompt,
+                            size=size,
+                            quality="standard",
+                            n=1
+                        )
 
-                    image_paths.append(local_path)
-                    log_data.append({
-                        "Prompt": prompt,
-                        "Style": style,
-                        "Size": size,
-                        "Filename": filename,
-                        "Image URL": image_url
-                    })
+                        image_url = response.data[0].url
+                        image_data = requests.get(image_url).content
 
-                    progress.progress((i+1)/len(df))
-                    st.image(local_path, caption=prompt, width=400)
-                    time.sleep(1.5)
+                        filename = f"image_{i+1}.png"
+                        local_path = os.path.join("generated_images", filename)
+                        with open(local_path, "wb") as f:
+                            f.write(image_data)
 
-                except Exception as e:
-                    st.error(f"Error with prompt {i+1}: {e}")
+                        image_paths.append(local_path)
+                    except Exception as e:
+                        st.error(f"❌ Error with prompt {i+1}: {e}")
 
-            log_df = pd.DataFrame(log_data)
-            log_file = "upload_log.csv"
-            log_df.to_csv(log_file, index=False)
+                    progress.progress((i + 1) / total)
 
-            st.success("✅ All images generated!")
-            st.download_button("📥 Download Upload Log", data=log_df.to_csv(index=False), file_name="upload_log.csv")
-
-            zip_buffer = BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w") as zipf:
-                for path in image_paths:
-                    zipf.write(path, os.path.basename(path))
-            zip_buffer.seek(0)
-            zip_filename = f"{project_name}.zip"
-
-            st.download_button("📦 Download All Images as ZIP", data=zip_buffer, file_name=zip_filename)
-
-            if email_recipient:
-                recipient_list = [e.strip() for e in email_recipient.split(",") if e.strip()]
-                st.info("Sending ZIP file and optional log to email(s)...")
-                if send_zip_email(recipient_list, zip_buffer, log_file, zip_filename, email_subject, email_message, include_log):
-                    st.success("✅ Email(s) sent successfully!")
+                if image_paths:
+                    st.success(f"✅ Generated {len(image_paths)} images.")
+                    with st.expander("📂 Preview Images"):
+                        for path in image_paths:
+                            st.image(path, use_column_width=True)
 
     except Exception as e:
-        st.error(f"❌ Something went wrong: {e}")
+        st.error(f"❌ Failed to load Excel: {e}")
