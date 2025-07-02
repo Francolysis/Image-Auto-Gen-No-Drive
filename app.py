@@ -11,6 +11,7 @@ from io import BytesIO
 from datetime import datetime
 import smtplib
 from email.message import EmailMessage
+import openpyxl
 
 st.set_page_config(page_title="AI Image Generator", layout="centered")
 st.title("🖼️ AI Image Generator")
