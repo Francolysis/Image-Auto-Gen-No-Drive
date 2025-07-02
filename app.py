@@ -22,23 +22,6 @@ client = OpenAI(api_key=openai_key)
 # Upload Excel File
 uploaded_file = st.file_uploader("📤 Upload Excel file with prompts", type=[".xlsx"])
 
-with st.expander("🧪 Test Prompt (Debug if generation fails)"):
-    test_prompt = st.text_input("Enter a test prompt:", value="A beautiful mountain landscape, cinematic")
-    test_size = st.selectbox("Select image size for test:", list(available_sizes.keys()), key="debug_size")
-    if st.button("⚡ Run Test Prompt"):
-        try:
-            size = available_sizes[test_size]
-            response = client.images.generate(
-                model="dall-e-3",
-                prompt=test_prompt,
-                size=size,
-                quality="standard",
-                n=1
-            )
-            st.image(response.data[0].url, caption="✅ Test image generated successfully")
-        except Exception as e:
-            st.error(f"❌ Failed to generate image: {e}")
-
 # Define available styles and sizes
 available_styles = ["cinematic", "realistic", "cartoon", "oil painting", "photograph", "digital art", "anime", "disney", "metro", "ghibli", "illustration"]
 available_sizes = {
@@ -57,6 +40,23 @@ email_subject = st.text_input("✉️ Email Subject", value="Your Generated Imag
 email_message = st.text_area("📝 Email Message", value="Here is your image zip file and upload log.")
 include_log = st.checkbox("📎 Attach upload log CSV to email", value=True)
 preview_email = st.checkbox("👁️ Preview email before sending", value=True)
+
+with st.expander("🧪 Test Prompt (Debug if generation fails)"):
+    test_prompt = st.text_input("Enter a test prompt:", value="A beautiful mountain landscape, cinematic")
+    test_size = st.selectbox("Select image size for test:", list(available_sizes.keys()), key="debug_size")
+    if st.button("⚡ Run Test Prompt"):
+        try:
+            size = available_sizes[test_size]
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=test_prompt,
+                size=size,
+                quality="standard",
+                n=1
+            )
+            st.image(response.data[0].url, caption="✅ Test image generated successfully")
+        except Exception as e:
+            st.error(f"❌ Failed to generate image: {e}")
 
 def send_zip_email(recipients, zip_bytes, log_path, zip_filename, subject, message, attach_log):
     try:
