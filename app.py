@@ -1,24 +1,24 @@
-
-# AI Image Generator App (No Google Drive)
+# AI Image Generator App (Updated for OpenAI SDK v1+)
 import streamlit as st
 import pandas as pd
-import openai
+from openai import OpenAI
 import os
 import time
 import requests
 import zipfile
 from io import BytesIO
 from datetime import datetime
-import smtplib
 from email.message import EmailMessage
+import smtplib
 import openpyxl
 
 st.set_page_config(page_title="AI Image Generator", layout="centered")
-st.title("🖼️ AI Image Generator")
+st.title("🖼️ AI Image Generator (No Drive)")
 st.markdown("Upload an Excel file with prompts, styles, and sizes to generate images using OpenAI DALL·E 3.")
 
-# Inputs
 openai_key = st.secrets["OPENAI_API_KEY"]
+client = OpenAI(api_key=openai_key)
+
 uploaded_file = st.file_uploader("📁 Upload Excel File (.xlsx)", type=["xlsx"])
 project_name = st.text_input("📝 Enter a name for your image zip file", value="generated_images")
 email_recipient = st.text_input("📧 Enter email(s) to receive ZIP (comma-separated)")
@@ -34,25 +34,24 @@ def send_zip_email(recipients, zip_bytes, log_path, zip_filename, subject, messa
 
         for email in recipients:
             msg = EmailMessage()
-            msg["Subject"] = subject
-            msg["From"] = sender
-            msg["To"] = email
+            msg['Subject'] = subject
+            msg['From'] = sender
+            msg['To'] = email
             msg.set_content(message)
 
-            msg.add_attachment(zip_bytes.read(), maintype="application", subtype="zip", filename=zip_filename)
+            msg.add_attachment(zip_bytes.read(), maintype='application', subtype='zip', filename=zip_filename)
             zip_bytes.seek(0)
 
             if attach_log:
                 with open(log_path, "rb") as log_file:
-                    msg.add_attachment(log_file.read(), maintype="text", subtype="csv", filename="upload_log.csv")
+                    msg.add_attachment(log_file.read(), maintype='text', subtype='csv', filename='upload_log.csv')
 
             if preview_email:
                 st.info(f"Previewing email to: {email}\nSubject: {subject}\nMessage: {message}")
 
-            with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
                 smtp.login(sender, password)
                 smtp.send_message(msg)
-
         return True
     except Exception as e:
         st.error(f"❌ Failed to send email: {e}")
@@ -60,7 +59,6 @@ def send_zip_email(recipients, zip_bytes, log_path, zip_filename, subject, messa
 
 if uploaded_file and openai_key:
     try:
-        openai.api_key = openai_key
         df = pd.read_excel(uploaded_file)
         df.columns = df.columns.str.strip().str.capitalize()
         df = df.dropna(subset=["Prompt"])
@@ -68,12 +66,10 @@ if uploaded_file and openai_key:
         st.dataframe(df)
 
         if st.button("🚀 Generate Images"):
-            st.info("Generating images...")
-
             local_folder = "generated_images"
             os.makedirs(local_folder, exist_ok=True)
-            log_data = []
             image_paths = []
+            log_data = []
             progress = st.progress(0)
 
             for i, row in df.iterrows():
@@ -94,8 +90,14 @@ if uploaded_file and openai_key:
 
                     full_prompt = f"{prompt}, {style}" if style.lower() not in prompt.lower() else prompt
 
-                    response = openai.Image.create(prompt=full_prompt, n=1, size=size)
-                    image_url = response["data"][0]["url"]
+                    response = client.images.generate(
+                        model="dall-e-3",
+                        prompt=full_prompt,
+                        size=size,
+                        quality="standard",
+                        n=1
+                    )
+                    image_url = response.data[0].url
                     image_data = requests.get(image_url).content
 
                     filename = f"image_{i+1}.png"
@@ -104,7 +106,6 @@ if uploaded_file and openai_key:
                         f.write(image_data)
 
                     image_paths.append(local_path)
-
                     log_data.append({
                         "Prompt": prompt,
                         "Style": style,
@@ -115,7 +116,7 @@ if uploaded_file and openai_key:
 
                     progress.progress((i+1)/len(df))
                     st.image(local_path, caption=prompt, width=400)
-                    time.sleep(1)
+                    time.sleep(1.5)
 
                 except Exception as e:
                     st.error(f"Error with prompt {i+1}: {e}")
@@ -125,7 +126,6 @@ if uploaded_file and openai_key:
             log_df.to_csv(log_file, index=False)
 
             st.success("✅ All images generated!")
-
             st.download_button("📥 Download Upload Log", data=log_df.to_csv(index=False), file_name="upload_log.csv")
 
             zip_buffer = BytesIO()
