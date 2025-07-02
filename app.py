@@ -22,6 +22,23 @@ client = OpenAI(api_key=openai_key)
 # Upload Excel File
 uploaded_file = st.file_uploader("📤 Upload Excel file with prompts", type=[".xlsx"])
 
+with st.expander("🧪 Test Prompt (Debug if generation fails)"):
+    test_prompt = st.text_input("Enter a test prompt:", value="A beautiful mountain landscape, cinematic")
+    test_size = st.selectbox("Select image size for test:", list(available_sizes.keys()), key="debug_size")
+    if st.button("⚡ Run Test Prompt"):
+        try:
+            size = available_sizes[test_size]
+            response = client.images.generate(
+                model="dall-e-3",
+                prompt=test_prompt,
+                size=size,
+                quality="standard",
+                n=1
+            )
+            st.image(response.data[0].url, caption="✅ Test image generated successfully")
+        except Exception as e:
+            st.error(f"❌ Failed to generate image: {e}")
+
 # Define available styles and sizes
 available_styles = ["cinematic", "realistic", "cartoon", "oil painting", "photograph", "digital art", "anime", "disney", "metro", "ghibli", "illustration"]
 available_sizes = {
